@@ -70,6 +70,7 @@ import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.TransformOrigin
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.luminance
@@ -129,8 +130,11 @@ import org.stypox.dicio.ui.util.SkillOutputPreviews
 import java.util.Locale
 import kotlin.math.roundToInt
 
-/** Where the sheet rests: on screen, or slid below it. */
-internal enum class GarSheetAnchor { Shown, Hidden }
+/**
+ * Where the sheet rests: on screen, slid below it, or pulled up to the top of the screen (which
+ * hands off to the full app).
+ */
+internal enum class GarSheetAnchor { Expanded, Shown, Hidden }
 
 /** What the sheet shows, top to bottom. */
 @Immutable
@@ -405,11 +409,14 @@ internal fun GarSheetLayout(
         }
         everShown = true
     }
-    // swiped down: dismiss
+    // swiped down: dismiss; swiped up: the full app
     LaunchedEffect(Unit) {
         snapshotFlow { dragState.settledValue }.collect {
-            if (it == GarSheetAnchor.Hidden && everShown) {
-                currentActions.onDismiss()
+            when {
+                !everShown -> Unit
+                it == GarSheetAnchor.Hidden -> currentActions.onDismiss()
+                it == GarSheetAnchor.Expanded -> currentActions.onOpenApp()
+                else -> Unit
             }
         }
     }
@@ -453,6 +460,8 @@ internal fun GarSheetLayout(
         val maxSheetHeight = (maxHeight - statusBar) * MAX_HEIGHT_SHARE
         val answerMaxHeight = maxHeight * ANSWER_HEIGHT_SHARE
         val scrim = MaterialTheme.colorScheme.scrim
+        val sheetFill = LocalGarbleColors.current.surface
+        val minExpand = with(density) { MIN_EXPAND_DISTANCE.roundToPx() }
 
         // the scrim: a tap outside the sheet dismisses it (screen readers use the handle). Its
         // alpha follows the sheet's offset in the draw phase, so a drag or a resize doesn't
@@ -490,12 +499,18 @@ internal fun GarSheetLayout(
                 .onSizeChanged { size ->
                     sheetHeight = size.height
                     val hidden = size.height.toFloat()
+                    // pulled up, the sheet's top reaches the top of the screen
+                    val expanded = -(constraints.maxHeight - size.height)
+                        .coerceAtLeast(minExpand).toFloat()
                     // no new anchors (an allocation) when the height is the same
-                    if (dragState.anchors.positionOf(GarSheetAnchor.Hidden) != hidden) {
+                    if (dragState.anchors.positionOf(GarSheetAnchor.Hidden) != hidden ||
+                        dragState.anchors.positionOf(GarSheetAnchor.Expanded) != expanded
+                    ) {
                         dragState.updateAnchors(
                             DraggableAnchors {
+                                GarSheetAnchor.Expanded at expanded
                                 GarSheetAnchor.Shown at 0f
-                                GarSheetAnchor.Hidden at size.height.toFloat()
+                                GarSheetAnchor.Hidden at hidden
                             }
                         )
                     }
@@ -522,6 +537,18 @@ internal fun GarSheetLayout(
                     translationY = BACK_SLIDE.toPx() * backProgress
                     transformOrigin = TransformOrigin(0.5f, 1f)
                     this.alpha = alpha
+                }
+                .drawBehind {
+                    // pulled up: the surface continues below the sheet down to the screen's edge
+                    val offset = dragState.offset
+                    if (!offset.isNaN() && offset < 0f) {
+                        val top = size.height / 2f
+                        drawRect(
+                            color = sheetFill,
+                            topLeft = Offset(0f, top),
+                            size = Size(size.width, size.height - top - offset),
+                        )
+                    }
                 }
                 .garbleSheet()
                 .nestedScroll(nestedScroll)
@@ -678,6 +705,7 @@ private fun GarSheetColumn(
             }
             GarSheetListeningButtons(
                 onTypeInstead = { onTypingChange(TextFieldValue()) },
+                onOpenApp = actions.onOpenApp,
                 onStop = { onMic(state) },
                 modifier = Modifier.padding(start = SIDE + 4.dp, end = SIDE + 4.dp, bottom = 24.dp),
             )
@@ -872,10 +900,11 @@ private fun garSheetNestedScroll(
 ): NestedScrollConnection = object : NestedScrollConnection {
     override fun onPreScroll(available: Offset, source: NestedScrollSource): Offset {
         val delta = available.y
-        return if (delta < 0 && source == NestedScrollSource.UserInput &&
-            !state.offset.isNaN() && state.offset > 0f
+        val offset = state.offset
+        return if (source == NestedScrollSource.UserInput && !offset.isNaN() &&
+            ((delta < 0 && offset > 0f) || (delta > 0 && offset < 0f))
         ) {
-            // pulled back up while partly swiped down: the sheet takes it first
+            // pulled back toward rest while partly swiped down or up: the sheet takes it first
             Offset(0f, state.dispatchRawDelta(delta))
         } else {
             Offset.Zero
@@ -890,7 +919,8 @@ private fun garSheetNestedScroll(
         }
 
     override suspend fun onPreFling(available: Velocity): Velocity {
-        if (available.y < 0 && !state.offset.isNaN() && state.offset > 0f) {
+        val offset = state.offset
+        if (!offset.isNaN() && ((available.y < 0 && offset > 0f) || (available.y > 0 && offset < 0f))) {
             settle(available.y)
             return available
         }
@@ -898,28 +928,56 @@ private fun garSheetNestedScroll(
     }
 
     override suspend fun onPostFling(consumed: Velocity, available: Velocity): Velocity {
-        if (!state.offset.isNaN() && state.offset > 0f) {
+        if (!state.offset.isNaN() && state.offset != 0f) {
             settle(available.y)
         }
         return available
     }
 
     private suspend fun settle(velocity: Float) {
-        val hidden = state.anchors.positionOf(GarSheetAnchor.Hidden)
-        val target = when {
-            velocity > velocityThreshold -> GarSheetAnchor.Hidden
-            velocity < -velocityThreshold -> GarSheetAnchor.Shown
-            state.offset > hidden * POSITIONAL_THRESHOLD -> GarSheetAnchor.Hidden
-            else -> GarSheetAnchor.Shown
-        }
+        val target = garSheetSettleTarget(
+            offset = state.offset,
+            velocity = velocity,
+            hidden = state.anchors.positionOf(GarSheetAnchor.Hidden),
+            expanded = state.anchors.positionOf(GarSheetAnchor.Expanded),
+            velocityThreshold = velocityThreshold,
+        )
         state.animateTo(target)
     }
+}
+
+/**
+ * Where a drag released at [offset] (0 = shown, positive = toward [hidden], negative = toward
+ * [expanded]) with [velocity] settles: a fast fling goes the way it was flung, one step from rest;
+ * otherwise past [POSITIONAL_THRESHOLD] of the way to the next anchor goes there.
+ */
+internal fun garSheetSettleTarget(
+    offset: Float,
+    velocity: Float,
+    hidden: Float,
+    expanded: Float,
+    velocityThreshold: Float,
+): GarSheetAnchor = when {
+    offset > 0f -> when {
+        velocity > velocityThreshold -> GarSheetAnchor.Hidden
+        velocity < -velocityThreshold -> GarSheetAnchor.Shown
+        offset > hidden * POSITIONAL_THRESHOLD -> GarSheetAnchor.Hidden
+        else -> GarSheetAnchor.Shown
+    }
+    offset < 0f -> when {
+        velocity < -velocityThreshold -> GarSheetAnchor.Expanded
+        velocity > velocityThreshold -> GarSheetAnchor.Shown
+        !expanded.isNaN() && offset < expanded * POSITIONAL_THRESHOLD -> GarSheetAnchor.Expanded
+        else -> GarSheetAnchor.Shown
+    }
+    else -> GarSheetAnchor.Shown
 }
 
 private val MAX_WIDTH = 640.dp
 private val HANDLE_HEIGHT = 48.dp
 private val SIDE = 20.dp
 private val VELOCITY_THRESHOLD = 125.dp // per second
+private val MIN_EXPAND_DISTANCE = 160.dp
 private val BACK_SLIDE = 24.dp
 private const val BACK_SCALE = 0.05f
 private const val POSITIONAL_THRESHOLD = 0.4f

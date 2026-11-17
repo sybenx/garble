@@ -291,10 +291,14 @@ private fun GarSheetBigMark(state: GarbleMarkState, modifier: Modifier = Modifie
     )
 }
 
-/** The Listening layout's buttons: "Type instead" (a raised pill) and stop (a raised circle). */
+/**
+ * The Listening layout's buttons: "Type instead" (a raised pill), "Open Garble" and stop (raised
+ * circles).
+ */
 @Composable
 internal fun GarSheetListeningButtons(
     onTypeInstead: () -> Unit,
+    onOpenApp: () -> Unit,
     onStop: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
@@ -308,6 +312,12 @@ internal fun GarSheetListeningButtons(
             icon = Icons.Rounded.Keyboard,
             onClick = onTypeInstead,
             modifier = Modifier.weight(1f),
+        )
+        GarSheetRaisedCircle(
+            icon = Icons.AutoMirrored.Rounded.OpenInNew,
+            contentDescription = stringResource(R.string.gar_sheet_open_app),
+            onClick = onOpenApp,
+            size = LISTENING_BUTTON,
         )
         GarSheetRaisedCircle(
             icon = Icons.Rounded.Close,
