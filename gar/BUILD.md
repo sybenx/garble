@@ -72,10 +72,10 @@ the llama.cpp and whisper.cpp submodules.
 
 ## 2. Get the code
 
-GAR lives on the branch `gar` of https://github.com/sybenx/gar.
+Garble lives on the branch `gar` of https://github.com/sybenx/garble.
 
 ```bash
-git clone --branch gar https://github.com/sybenx/gar gar && cd gar
+git clone --branch gar https://github.com/sybenx/garble garble && cd garble
 ```
 
 llama.cpp is a git submodule at `gar/llm/llama.cpp`, pinned to `620d2225` (release v0.7.0).

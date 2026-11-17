@@ -14,8 +14,8 @@ problems to Dicio.
 
 Garble needs an arm64 phone on Android 9 or newer. Install it with
 [Obtainium](https://github.com/ImranR98/Obtainium): Add app, paste
-`https://github.com/sybenx/gar`, then Install. Obtainium picks up new releases from there. The
-APK is also attached to every [release](https://github.com/sybenx/gar/releases). The application
+`https://github.com/sybenx/garble`, then Install. Obtainium picks up new releases from there. The
+APK is also attached to every [release](https://github.com/sybenx/garble/releases). The application
 id is `cc.aaro.gar`, so Garble installs next to Dicio.
 
 ## First run
