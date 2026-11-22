@@ -11,11 +11,6 @@
 /checkouts
 .kotlin
 
-# Fastlane
-fastlane/report.xml
-fastlane/README.md
-fastlane_config.txt
-
 # Python
 __pycache__/
 *.pyc
