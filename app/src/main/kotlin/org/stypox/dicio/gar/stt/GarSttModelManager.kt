@@ -35,6 +35,7 @@ import org.stypox.dicio.MainActivity
 import org.stypox.dicio.di.LocaleManager
 import org.stypox.dicio.gar.GarFallbackImpl
 import org.stypox.dicio.gar.model.GarDownloadException
+import org.stypox.dicio.gar.model.GarDownloadService
 import org.stypox.dicio.gar.model.GarEngineHolder
 import org.stypox.dicio.gar.model.GarLoadGuard
 import org.stypox.dicio.gar.model.GarModelDownloader
@@ -122,6 +123,8 @@ class GarSttModelManager internal constructor(
     // GAR contact names: the prompt's names, and what refreshes them at each capture
     override val promptNames: StateFlow<List<String>> = MutableStateFlow(emptyList()),
     private val refreshPromptNames: () -> Unit = {},
+    /** A download started: keeps the process alive until it ends ([GarDownloadService]). */
+    private val onTransferStarted: () -> Unit = {},
 ) : SttModels {
 
     @Inject
@@ -147,6 +150,7 @@ class GarSttModelManager internal constructor(
         loadLock = GarNativeLoadLock.shared,
         promptNames = promptNames.names,
         refreshPromptNames = promptNames::refreshIfStale,
+        onTransferStarted = { GarDownloadService.start(context) },
     ) {
         (context.applicationContext as? Application)?.let { app ->
             val activityCallbacks = MainActivityCallbacks()
@@ -281,6 +285,7 @@ class GarSttModelManager internal constructor(
         val total = missing.sumOf { it.sizeBytes }
         _transferModel.value = target
         _transfer.value = SttTransfer.Running(0, total)
+        onTransferStarted()
         var done = 0L
         var lastPermille = -1L
         try {

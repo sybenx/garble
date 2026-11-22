@@ -73,6 +73,7 @@ private class SttFixture(scope: CoroutineScope) {
     var failLoading = false
     val promptNames = MutableStateFlow(listOf("Aaron"))
     var nameRefreshes = 0
+    var transfersStarted = 0
 
     val manager = GarSttModelManager(
         scope = scope,
@@ -98,6 +99,7 @@ private class SttFixture(scope: CoroutineScope) {
         io = EmptyCoroutineContext,
         promptNames = promptNames,
         refreshPromptNames = { nameRefreshes++ },
+        onTransferStarted = { transfersStarted++ },
     )
 
     fun file(download: SttDownload) = File(modelsDir, download.fileName)
@@ -160,6 +162,8 @@ class GarSttModelManagerTest : StringSpec({
             runCurrent()
             fixture.manager.transfer.value shouldBe
                 SttTransfer.Running(0, BASE.sizeBytes + VAD.sizeBytes)
+            // the download service is asked to keep the process alive, once per download
+            fixture.transfersStarted shouldBe 1
             fixture.manager.state.first().shouldBeInstanceOf<GarSttState.Downloading>()
                 .model shouldBe GarSttModel.GAR_STT_MODEL_BASE_EN
             // a second tap doesn't start a second download
@@ -173,6 +177,11 @@ class GarSttModelManagerTest : StringSpec({
             fixture.manager.vadFile shouldBe fixture.file(VAD)
             fixture.manager.state.first() shouldBe GarSttState.Ready
             fixture.transcribe() shouldBe BASE.fileName
+            fixture.transfersStarted shouldBe 1
+            // all files there: nothing to download, no service
+            fixture.manager.download()
+            advanceUntilIdle()
+            fixture.transfersStarted shouldBe 1
 
             // nothing is missing: nothing is fetched again
             fixture.manager.download()

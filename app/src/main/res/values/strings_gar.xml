@@ -30,6 +30,11 @@
     <string name="gar_status_error">%1$s</string>
     <string name="gar_error_download_failed">Download failed. Try again.</string>
     <string name="gar_error_download_damaged">The download was damaged. Try again.</string>
+    <string name="gar_download_channel">Model downloads</string>
+    <string name="gar_download_language_model">Downloading the language model</string>
+    <string name="gar_download_speech_model">Downloading the speech model</string>
+    <string name="gar_download_both">Downloading models</string>
+    <string name="gar_download_cancel">Cancel</string>
     <string name="gar_error_import_failed">Could not import the file. Try again.</string>
     <string name="gar_error_load_failed">Could not load the model. Tap to try again.</string>
     <string name="gar_error_load_crashed">Loading this model stopped the app twice. Tap to try again.</string>

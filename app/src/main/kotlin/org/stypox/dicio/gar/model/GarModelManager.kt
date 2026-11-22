@@ -424,6 +424,7 @@ class GarModelManager @Inject constructor(
             }
 
             _downloadState.value = GarTransferState.Running(model.setting, 0, model.sizeBytes)
+            GarDownloadService.start(context)
             var lastPermille = -1L
             try {
                 downloader.download(

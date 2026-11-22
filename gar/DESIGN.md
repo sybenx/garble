@@ -672,7 +672,11 @@ changed tools run at the normal priority; saving a prefix state file always runs
 Settings (`gar_settings.proto`, own DataStore file): LLM on/off (on), model (Qwen3-0.6B Q4_K_M
 default, FunctionGemma 270M Q8_0, custom GGUF), confirm model-understood commands (on).
 Downloads: pinned Hugging Face revision URLs, HTTP status check, resume with `Range`, size and
-sha256 verification. If the server answers a resume with another part of the file (a wrong or
+sha256 verification. While a download runs, `GarDownloadService` (a dataSync foreground service with a progress
+notification and a Cancel button) keeps the process alive, for the language model and the speech
+model alike, so leaving the app no longer stops it; the service stops itself when neither is
+downloading. A download Android stops anyway (a force stop, Android 15's daily dataSync limit)
+resumes from its `.part` file on the next tap. If the server answers a resume with another part of the file (a wrong or
 missing `Content-Range`), the `.part` file is deleted and the file downloaded from the start,
 once per attempt; a second wrong answer, or one to a download that started at 0, still fails
 ("Server resumed at X instead of Y"). This downloader (also for the Whisper speech model, "Speech recognition (Whisper)"), Vosk and
